@@ -4,6 +4,7 @@ import {
   Text, 
   View,
   Animated,
+  Easing,
   PanResponder,
   Dimensions
 } from 'react-native';
@@ -16,14 +17,19 @@ export default class App extends React.Component {
     // Set up some base dimensions
     this._fullWidth = Dimensions.get('window').width;
     this._fullHeight = Dimensions.get('window').height;
+    this._defaultWidth = this._fullWidth + 10;
+    this._modularWidth = this._fullWidth - 100;
     this._halfHeight = Math.ceil(this._fullHeight / 2);
-    this._bgHeight = this._fullHeight + 200;
+    this._bgHeight = this._fullHeight - 200;
     this._draggieHeight = 80;
-    this._lastPosition = { x: 0, y: this._halfHeight };
+    this._lastPosition = { x: 0, y: 0 };
 
     // Animatable elements
     this._bgTop = new Animated.Value();
     this._position = new Animated.ValueXY();
+    this._draggieWidth = new Animated.Value(this._defaultWidth);
+    this._grabbieOpacity = new Animated.Value(0.5);
+    this._movieOpacity = new Animated.Value(0);
 
     // Intial state
     this.state = {
@@ -35,27 +41,44 @@ export default class App extends React.Component {
     // Register pan responder
     this._panResponder = PanResponder.create({
       onStartShouldSetPanResponder: (e, gesture) => true,
-      onPanResponderMove: (e, gesture) => { 
-        this.moveUI(gesture.dx, gesture.dy);
-      },
-      onPanResponderRelease: (e, gesture) => { 
-        this.snapIntoPlace(gesture);
-        this.setState({ debug: { ...gesture } });
-      }
+      onPanResponderGrant: this.grabDraggie.bind(this),
+      onPanResponderMove: this.moveDraggie.bind(this),
+      onPanResponderRelease: this.releaseDraggie.bind(this)
     });
 
     // Set initial UI position
     this.moveUI(0, 0);
   }
 
+  grabDraggie(e, gesture) {
+    Animated.parallel([
+      Animated.timing(this._movieOpacity, {
+        toValue: 1,
+        easing: Easing.ease,
+        duration: 200
+      }),
+      Animated.spring(this._draggieWidth, {
+        toValue: this._modularWidth,
+        friction: 5
+      })
+    ]).start();
+  }
+
+  moveDraggie(e, gesture) {
+    this.moveUI(gesture.dx, gesture.dy);
+  }
+
+  releaseDraggie(e, gesture) {
+    this.snapIntoPlace(gesture);
+  }
+
   // Calculate positional offsets for paralax effect
   calculateNewPosition(dragX, dragY, offsetX, offsetY) {
-    const draggieOffset = (this._draggieHeight / 2 * -1);
-    const bgOffset = ((offsetY + dragY - this._halfHeight) / 2);
+    const bgOffset = ((this._fullHeight - this._bgHeight) / 2);
     const newPosition = {
       draggieX: (offsetX + dragX),
-      draggieY: (offsetY + dragY + draggieOffset),
-      backgroundY: ((this._fullHeight - this._bgHeight) / 2) + bgOffset
+      draggieY: (offsetY + dragY),
+      backgroundY: (((offsetY + dragY) / 2) + bgOffset)
     };
 
     return newPosition;
@@ -79,7 +102,7 @@ export default class App extends React.Component {
 
   // Apply spring animation
   snapIntoPlace(gesture) {
-    const newPosition = this.calculateNewPosition(0, this._halfHeight, 0, 0);
+    const newPosition = this.calculateNewPosition(0, 0, 0, 0);
 
     Animated.parallel([
       Animated.spring(this._position, {
@@ -92,7 +115,16 @@ export default class App extends React.Component {
       Animated.spring(this._bgTop, {
         toValue: newPosition.backgroundY,
         friction: 50
-      })
+      }),
+      Animated.spring(this._draggieWidth, {
+        toValue: this._defaultWidth,
+        friction: 50
+      }),
+      Animated.timing(this._movieOpacity, {
+        toValue: 0,
+        easing: Easing.ease,
+        duration: 200
+      }),
     ]).start();
   }
 
@@ -106,7 +138,15 @@ export default class App extends React.Component {
     const draggieStyle = {
       ...styles.draggie,
       ...this._position.getLayout(),
+      width: this._draggieWidth,
       height: this._draggieHeight
+    };
+    const grabbieStyle = {
+      ...styles.grabbie
+    };
+    const movieStyle = {
+      ...styles.movie,
+      opacity: this._movieOpacity
     };
 
     if (this.state.debug) {
@@ -119,7 +159,10 @@ export default class App extends React.Component {
           <LinearGradient colors={['#4c669f', '#3b5998', '#192f6a']} style={styles.background} />
         </Animated.View>
         <Animated.View {...this._panResponder.panHandlers} style={draggieStyle}>
-          <Text style={styles.draggieText}>Drag Me</Text>
+          <Animated.View style={movieStyle} />
+          <View style={grabbieStyle}>
+            <Text style={styles.innerText}>Grab me</Text>
+          </View>
         </Animated.View>
       </View>
     );
@@ -142,15 +185,30 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   draggie: {
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  grabbie: {
     position: 'absolute',
     width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#222',
-    opacity: .5,
+    borderRadius: 5,
+    opacity: .4,
   },
-  draggieText: {
+  movie: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eee',
+    borderRadius: 5,
+  },
+  innerText: {
     color: '#eee',
     fontSize: 24
-  }
+  },
 });
