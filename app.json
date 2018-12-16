@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "xmas-touch",
+    "name": "xmas touch",
     "slug": "xmas-touch",
     "privacy": "public",
     "sdkVersion": "31.0.0",
@@ -23,7 +23,8 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kcarboneapps.xmas-touch"
     }
   }
 }

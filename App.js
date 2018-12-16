@@ -15,25 +15,31 @@ export default class App extends React.Component {
   constructor(props) {
     super(props);
 
+    // API params
+    this._apiBase = 'http://10.0.0.61/api/97B53A9ADC';
+
     // Set up some base dimensions
     this._fullWidth = Dimensions.get('window').width;
     this._fullHeight = Dimensions.get('window').height;
     this._defaultWidth = this._fullWidth + 10;
-    this._modularWidth = this._fullWidth - 100;
+    this._modularWidth = this._fullWidth - 150;
     this._halfHeight = Math.ceil(this._fullHeight / 2);
-    this._bgHeight = this._fullHeight - 200;
+    this._bgHeight = this._fullHeight + 400;
     this._lastPosition = { x: 0, y: 0 };
+    this._currentOnState = false;
 
     // Animatable elements
     this._bgTop = new Animated.Value();
     this._position = new Animated.ValueXY();
     this._draggieWidth = new Animated.Value(this._defaultWidth);
     this._draggieHeight = new Animated.Value(0);
-    this._grabbieOpacity = new Animated.Value(0.5);
-    this._movieOpacity = new Animated.Value(0);
+    this._indicatorWidth = new Animated.Value(50);
+    this._indicatorOpacity = new Animated.Value(1);
+    this._grabbieOpacity = new Animated.Value(0.4);
 
     // Intial state
     this.state = {
+      currentText: 'Loading',
       debug: '',
     };
   }
@@ -51,24 +57,89 @@ export default class App extends React.Component {
     this.moveUI(0, 0);
 
     // Reveal draggie
-    Animated.timing(this._draggieHeight, {
+    Animated.spring(this._draggieHeight, {
       toValue: 80,
-      easing: Easing.out(Easing.exp),
-      duration: 600
+      friction: 10
     }).start();
+
+    // Init with api
+    setTimeout(this.fetchInfo.bind(this), 1000);
   }
 
+  // Get basic light info
+  async fetchInfo(url) {
+    const light1info = await this.getJson('/lights/1');
+    
+    if (light1info.state.on) {
+      this.turnLightsOn();
+    }
+    else {
+      this.turnLightsOff();
+    }
+  }
+
+  async turnLightsOn() {
+    this.setState({ currentText: '🎄 Christmas time! 🌟' });
+    this.snapIntoPlace(true);
+
+    await this.setLightState(1, true);
+    await this.setLightState(2, true, 500);
+    await this.setLightState(3, true, 500);
+    await this.setLightState(4, true, 500);
+    await this.setLightState(5, true, 500);
+  }
+
+  async turnLightsOff() {
+    this.setState({ currentText: 'All quiet 💤' });
+    this.snapIntoPlace(false);
+
+    await this.setLightState(1, false);
+    await this.setLightState(2, false, 500);
+    await this.setLightState(3, false, 500);
+    await this.setLightState(4, false, 500);
+    await this.setLightState(5, false, 500);
+  }
+
+  // Ajax functions
+  async getJson(url) {
+    const request = await fetch(this._apiBase + url);
+    return await request.json();
+  }
+
+  async putJson(url, body) {
+    const request = await fetch(this._apiBase + url, {
+      method: 'PUT',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body)
+    });
+    return await request.json();
+  }
+
+  async setLightState(lightNum, newState, delay) {
+    return new Promise(resolve => {
+      setTimeout(async () => {
+        await this.putJson(`/lights/${lightNum}/state`, { on: newState });
+        resolve();
+      }, (delay || 0))
+    });
+  }
+
+  // UI functions
   grabDraggie(e, gesture) {
+    this.setState({ currentText: 'Wheeee!' });
     Animated.parallel([
-      Animated.timing(this._movieOpacity, {
-        toValue: 1,
-        easing: Easing.ease,
-        duration: 200
-      }),
       Animated.spring(this._draggieWidth, {
         toValue: this._modularWidth,
         friction: 5
-      })
+      }),
+      Animated.timing(this._grabbieOpacity, {
+        toValue: 0.5,
+        easing: Easing.ease,
+        duration: 5
+      }),
     ]).start();
   }
 
@@ -77,7 +148,23 @@ export default class App extends React.Component {
   }
 
   releaseDraggie(e, gesture) {
-    this.snapIntoPlace(gesture);
+    this.setState({ debug: { ...gesture } });
+
+    if (gesture.vy < -1) {
+      this.turnLightsOn();
+    }
+    else if (gesture.vx > 1) {
+      this.turnLightsOff();
+    }
+    else if (gesture.moveY < this._halfHeight) {
+      this.turnLightsOn();
+    }
+    else if (gesture.moveY > this._halfHeight) {
+      this.turnLightsOff();
+    }
+    else {
+      this.snapIntoPlace(this._currentOnState);
+    }
   }
 
   // Calculate positional offsets for paralax effect
@@ -107,10 +194,22 @@ export default class App extends React.Component {
       backgroundY: this._bgTop
     }])(newPosition);
   }
-
+  
   // Apply spring animation
-  snapIntoPlace(gesture) {
-    const newPosition = this.calculateNewPosition(0, 0, 0, 0);
+  snapIntoPlace(onPosition) {
+    // OFF position
+    let newPosition = this.calculateNewPosition(0, 250, 0, 0);
+
+    if (onPosition) {
+      // ON position
+      newPosition = this.calculateNewPosition(0, -250, 0, 0);
+    }
+
+    this._currentOnState = onPosition;
+    this._lastPosition = {
+      x: newPosition.draggieX,
+      y: newPosition.draggieY
+    };
 
     Animated.parallel([
       Animated.spring(this._position, {
@@ -118,20 +217,30 @@ export default class App extends React.Component {
           x: newPosition.draggieX,
           y: newPosition.draggieY
         },
-        friction: 50
+        friction: 6
       }),
       Animated.spring(this._bgTop, {
         toValue: newPosition.backgroundY,
-        friction: 50
+        friction: 6
       }),
       Animated.spring(this._draggieWidth, {
         toValue: this._defaultWidth,
-        friction: 50
+        friction: 5
       }),
-      Animated.timing(this._movieOpacity, {
+      Animated.timing(this._grabbieOpacity, {
+        toValue: onPosition ? 0.8 : 0.4,
+        easing: Easing.ease,
+        duration: 5
+      }),
+      Animated.timing(this._indicatorWidth, {
         toValue: 0,
         easing: Easing.ease,
-        duration: 200
+        duration: 5
+      }),
+      Animated.timing(this._indicatorOpacity, {
+        toValue: 0,
+        easing: Easing.ease,
+        duration: 5
       }),
     ]).start();
   }
@@ -150,15 +259,13 @@ export default class App extends React.Component {
       height: this._draggieHeight
     };
     const grabbieStyle = {
-      ...styles.grabbie
-    };
-    const movieStyle = {
-      ...styles.movie,
-      opacity: this._movieOpacity
+      ...styles.grabbie,
+      opacity: this._grabbieOpacity
     };
     const indicatorStyle = {
       ...styles.indicator,
-      opacity: .7
+      width: this._indicatorWidth,
+      opacity: this._indicatorOpacity
     };
 
     if (this.state.debug) {
@@ -168,16 +275,15 @@ export default class App extends React.Component {
     return (
       <View style={styles.container}>
         <Animated.View style={bgWrapperStyle}>
-          <LinearGradient colors={['#ccc', '#ddd', '#eee']} style={styles.background} />
+          <LinearGradient colors={['#111122', '#111122', '#111166', '#49d882', '#f9c157']} style={styles.background} />
         </Animated.View>
         <Animated.View {...this._panResponder.panHandlers} style={draggieStyle}>
-          <Animated.View style={movieStyle} />
-          <View style={grabbieStyle}>
+          <Animated.View style={grabbieStyle}>
             <Animated.View style={indicatorStyle}>
-              <WaveIndicator color="#fff" count={2} waveFactor={0.4} />
+              <WaveIndicator color="#222" count={2} waveFactor={0.4} />
             </Animated.View>
-            <Text style={styles.innerText}>Grab me</Text>
-          </View>
+            <Text style={styles.innerText}>{this.state.currentText}</Text>
+          </Animated.View>
         </Animated.View>
       </View>
     );
@@ -211,21 +317,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#222',
-    borderRadius: 5,
-    opacity: .4,
-  },
-  movie: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#eee',
-    borderRadius: 5,
+    backgroundColor: '#ccc',
+    shadowColor: '#333',
+    shadowOffset: {
+      width: 2,
+      height: 2
+    },
+    shadowRadius: 6,
+    shadowOpacity: 0.8,
+    borderRadius: 5
   },
   innerText: {
-    color: '#eee',
+    color: '#222',
     fontSize: 24
   },
   indicator: {
