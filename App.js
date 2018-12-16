@@ -8,6 +8,7 @@ import {
   PanResponder,
   Dimensions
 } from 'react-native';
+import { WaveIndicator } from 'react-native-indicators';
 import { LinearGradient } from 'expo';
 
 export default class App extends React.Component {
@@ -21,13 +22,13 @@ export default class App extends React.Component {
     this._modularWidth = this._fullWidth - 100;
     this._halfHeight = Math.ceil(this._fullHeight / 2);
     this._bgHeight = this._fullHeight - 200;
-    this._draggieHeight = 80;
     this._lastPosition = { x: 0, y: 0 };
 
     // Animatable elements
     this._bgTop = new Animated.Value();
     this._position = new Animated.ValueXY();
     this._draggieWidth = new Animated.Value(this._defaultWidth);
+    this._draggieHeight = new Animated.Value(0);
     this._grabbieOpacity = new Animated.Value(0.5);
     this._movieOpacity = new Animated.Value(0);
 
@@ -48,6 +49,13 @@ export default class App extends React.Component {
 
     // Set initial UI position
     this.moveUI(0, 0);
+
+    // Reveal draggie
+    Animated.timing(this._draggieHeight, {
+      toValue: 80,
+      easing: Easing.out(Easing.exp),
+      duration: 600
+    }).start();
   }
 
   grabDraggie(e, gesture) {
@@ -148,6 +156,10 @@ export default class App extends React.Component {
       ...styles.movie,
       opacity: this._movieOpacity
     };
+    const indicatorStyle = {
+      ...styles.indicator,
+      opacity: .7
+    };
 
     if (this.state.debug) {
       console.log(this.state.debug);
@@ -156,11 +168,14 @@ export default class App extends React.Component {
     return (
       <View style={styles.container}>
         <Animated.View style={bgWrapperStyle}>
-          <LinearGradient colors={['#4c669f', '#3b5998', '#192f6a']} style={styles.background} />
+          <LinearGradient colors={['#ccc', '#ddd', '#eee']} style={styles.background} />
         </Animated.View>
         <Animated.View {...this._panResponder.panHandlers} style={draggieStyle}>
           <Animated.View style={movieStyle} />
           <View style={grabbieStyle}>
+            <Animated.View style={indicatorStyle}>
+              <WaveIndicator color="#fff" count={2} waveFactor={0.4} />
+            </Animated.View>
             <Text style={styles.innerText}>Grab me</Text>
           </View>
         </Animated.View>
@@ -192,6 +207,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: '100%',
     height: '100%',
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#222',
@@ -210,5 +227,10 @@ const styles = StyleSheet.create({
   innerText: {
     color: '#eee',
     fontSize: 24
+  },
+  indicator: {
+    paddingRight: 10,
+    //backgroundColor: '#0dd',
+    width: 50
   },
 });
